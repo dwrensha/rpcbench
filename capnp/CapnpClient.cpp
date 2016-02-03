@@ -8,6 +8,7 @@
 #include <capnp/capability.h>
 #include <kj/async-io.h>
 #include <kj/async.h>
+#include <kj/debug.h>
 
 #include "bench.capnproto.h"
 
@@ -16,8 +17,18 @@
 #include <cstdint>
 
 
+class ErrorHandler: public kj::TaskSet::ErrorHandler {
+public:
+  virtual ~ErrorHandler() {}
+  virtual void taskFailed(kj::Exception&& exception) override {
+    KJ_LOG(ERROR, exception);
+  }
+};
+
 int main(int argc, char* argv[])
 {
+  ErrorHandler errorHandler;
+  kj::TaskSet taskSet(errorHandler);
   std::string ipAddr = "localhost";
   int port = 8888;
   int64_t loopCount = 100;
@@ -45,14 +56,25 @@ int main(int argc, char* argv[])
 
   auto start = std::chrono::high_resolution_clock::now();
   char str[] = "abcdefgh";
+
+  int counter = 0;
+  auto paf = kj::newPromiseAndFulfiller<void>();
   for (int64_t i = 0; i < loopCount ; i++)
   {
     auto req = cap.getRequest();
     req.setKey(::capnp::Data::Reader(reinterpret_cast<const kj::byte*>(str), 8));
-    auto p = req.send();
-    p.wait(ioContext.waitScope);
+
+    auto p = req.send().ignoreResult().then([&]() {
+      counter += 1;
+      if (counter == loopCount) {
+        // We've gotten a reply for every request.
+        paf.fulfiller->fulfill();
+      }
+    });
+    taskSet.add(kj::mv(p));
   }
-  
+
+  paf.promise.wait(ioContext.waitScope);
   auto finish = std::chrono::high_resolution_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(finish - start).count();
 

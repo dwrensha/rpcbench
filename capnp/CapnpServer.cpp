@@ -8,7 +8,7 @@
 
 #include "bench.capnproto.h"
 
-#include <glog/logging.h>
+//#include <glog/logging.h>
 
 #include <string>
 #include <vector>
@@ -31,7 +31,7 @@ class SessionImpl : public benchmark::Database::Server
 
 int main(int argc, char* argv[])
 {
-  std::string addr_ = "localhost";
+  std::string addr_ = "127.0.0.1";
   int port_ = 8888;
 
   auto ioContext = kj::setupAsyncIo();
